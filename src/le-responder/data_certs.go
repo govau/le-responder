@@ -12,6 +12,7 @@ type certStorage interface {
 	DeletePath(path string) error
 	SavePath(path string, chc *credhubCert) error
 	FetchCerts() ([]*credhubCert, error)
+	FetchHostnames() ([]string, error)
 	LoadPath(path string) (*credhubCert, error)
 }
 
@@ -67,12 +68,14 @@ func (cs *certStore) SavePath(path string, chc *credhubCert) error {
 	}, &ignoreMe)
 }
 
-func (cs *certStore) FetchCerts() ([]*credhubCert, error) {
+type cred struct {
+	Name string `json:"name"`
+}
+
+func (cs *certStore) getCredList() ([]cred, error) {
 	// Fetch list of certs
 	var cr struct {
-		Credentials []struct {
-			Name string `json:"name"`
-		} `json:"credentials"`
+		Credentials []cred `json:"credentials"`
 	}
 	err := cs.CredHub.MakeRequest("/api/v1/data", url.Values{
 		"path": {"/certs"},
@@ -80,13 +83,34 @@ func (cs *certStore) FetchCerts() ([]*credhubCert, error) {
 	if err != nil {
 		return nil, err
 	}
+	return cr.Credentials, nil
+}
 
-	rv := make([]*credhubCert, len(cr.Credentials))
-	for i, curCred := range cr.Credentials {
+func (cs *certStore) FetchCerts() ([]*credhubCert, error) {
+	cl, err := cs.getCredList()
+	if err != nil {
+		return nil, err
+	}
+	rv := make([]*credhubCert, len(cl))
+	for i, curCred := range cl {
 		rv[i], err = cs.LoadPath(curCred.Name)
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	return rv, nil
+}
+
+func (cs *certStore) FetchHostnames() ([]string, error) {
+	cl, err := cs.getCredList()
+	if err != nil {
+		return nil, err
+	}
+
+	rv := make([]string, len(cl))
+	for i, curCred := range cl {
+		rv[i] = hostFromPath(curCred.Name)
 	}
 
 	return rv, nil

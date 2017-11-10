@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/hex"
-	"fmt"
 	"log"
 	"strings"
 	"sync"
@@ -79,7 +78,7 @@ type outputObserver struct {
 	S3 []*bucket `yaml:"s3"`
 }
 
-func (n *outputObserver) createTarball(certs []*credhubCert) ([]byte, error) {
+func createTarball(certs []*credhubCert) ([]byte, error) {
 	buffer := &bytes.Buffer{}
 	gzipWriter := gzip.NewWriter(buffer)
 	tarWriter := tar.NewWriter(gzipWriter)
@@ -88,7 +87,12 @@ func (n *outputObserver) createTarball(certs []*credhubCert) ([]byte, error) {
 		hn := hostFromPath(cert.path)
 		he := hex.EncodeToString([]byte(hn))
 
-		certBytes := []byte(fmt.Sprintf("%s\n%s\n", strings.TrimSpace(cert.PrivateKey), strings.TrimSpace(cert.Certificate)))
+		certBytes := []byte(strings.Join([]string{
+			strings.TrimSpace(cert.PrivateKey),
+			strings.TrimSpace(cert.Certificate),
+			strings.TrimSpace(cert.CA),
+			"", // so that we have a trailing new line
+		}, "\n"))
 
 		err := tarWriter.WriteHeader(&tar.Header{
 			Name:     he + ".crt",
@@ -118,7 +122,7 @@ func (n *outputObserver) createTarball(certs []*credhubCert) ([]byte, error) {
 }
 
 func (n *outputObserver) CertsAreUpdated(certs []*credhubCert) error {
-	tb, err := n.createTarball(certs)
+	tb, err := createTarball(certs)
 	if err != nil {
 		return err
 	}
