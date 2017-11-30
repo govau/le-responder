@@ -1,0 +1,25 @@
+name: le-responder
+version: 1.0.1
+commit_hash: 7b8af41
+uncommitted_changes: false
+jobs:
+- name: le-responder
+  version: b722c41e1a5212aea3e9487642c189f8176820a3
+  fingerprint: b722c41e1a5212aea3e9487642c189f8176820a3
+  sha1: 2088b67f0d6e9064ae57cc3a0980698679f41868
+packages:
+- name: golang-1.9-linux
+  version: 8883f853a0982db91c1cbbdaf3f62d69eee845b3
+  fingerprint: 8883f853a0982db91c1cbbdaf3f62d69eee845b3
+  sha1: 1527a1479e5e99004dc88690c87a9cd65c555ed7
+  dependencies: []
+- name: le-responder
+  version: 5b2d7182472c01fb4b635ea4d9f593f54d5b36d2
+  fingerprint: 5b2d7182472c01fb4b635ea4d9f593f54d5b36d2
+  sha1: 2f3d367b941f5cd2ec5bf95599fa8a29ad51338f
+  dependencies:
+  - golang-1.9-linux
+license:
+  version: 10b395e52546d70e842f9f583bbcc626b8bf321c
+  fingerprint: 10b395e52546d70e842f9f583bbcc626b8bf321c
+  sha1: 2ab2fe3c4a5a7259cf2adb076eafb246097517f2
