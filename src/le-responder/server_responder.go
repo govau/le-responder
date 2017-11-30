@@ -10,12 +10,14 @@ import (
 type serverResponder struct {
 	Port int `yaml:"port"`
 
+	uiManager         string
 	challengeMutex    sync.RWMutex
 	challengeResponse map[string][]byte
 }
 
-func (sr *serverResponder) Init() error {
+func (sr *serverResponder) Init(extUrlForConvenience string) error {
 	sr.challengeResponse = make(map[string][]byte)
+	sr.uiManager = extUrlForConvenience
 	return nil
 }
 
@@ -34,11 +36,16 @@ func (sr *serverResponder) ClearChallengeValue(k string) {
 
 func (sr *serverResponder) RunForever() {
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", sr.Port), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/" {
+			// Convenience for admins who accidentally drop the https
+			http.Redirect(w, r, sr.uiManager, http.StatusMovedPermanently)
+			return
+		}
 		sr.challengeMutex.RLock()
 		v, ok := sr.challengeResponse[r.URL.Path]
 		sr.challengeMutex.RUnlock()
 		if !ok {
-			w.WriteHeader(http.StatusNotFound)
+			http.NotFound(w, r)
 			return
 		}
 		w.Write(v)

@@ -117,6 +117,9 @@ func (acs *acmeCertSource) ensureRegistered(ctx context.Context) {
 	if err != nil {
 		log.Println("Error registering with LE - we've likely already done so, so ignoring:", err)
 	}
+
+	// no point re-doing each time
+	acs.acmeKnownRegistered = true
 }
 
 func (acs *acmeCertSource) SupportsManual() bool {

@@ -1,7 +1,0 @@
----
-name: le-responder-release
-blobstore:
-  provider: s3
-  options:
-    region: ap-southeast-2
-    bucket_name: dta-nginx-tlsconfig-boshrelease

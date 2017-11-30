@@ -59,9 +59,10 @@ func (b *bucket) Put(data []byte) error {
 	}
 
 	result, err := s3manager.NewUploader(b.awsSession).Upload(&s3manager.UploadInput{
-		Bucket: aws.String(b.Bucket),
-		Key:    aws.String(b.Object),
-		Body:   bytes.NewReader(data),
+		Bucket:               aws.String(b.Bucket),
+		Key:                  aws.String(b.Object),
+		Body:                 bytes.NewReader(data),
+		ServerSideEncryption: aws.String("AES256"),
 	})
 	if err != nil {
 		return err
@@ -76,15 +77,31 @@ func (b *bucket) Put(data []byte) error {
 
 type outputObserver struct {
 	S3 []*bucket `yaml:"s3"`
+
+	ssOracle shouldShipOracle
 }
 
-func createTarball(certs []*credhubCert) ([]byte, error) {
+func (n *outputObserver) Init(ssOracle shouldShipOracle) error {
+	n.ssOracle = ssOracle
+	return nil
+}
+
+func (n *outputObserver) createTarball(certs []*credhubCert) ([]byte, error) {
 	buffer := &bytes.Buffer{}
 	gzipWriter := gzip.NewWriter(buffer)
 	tarWriter := tar.NewWriter(gzipWriter)
 
 	for _, cert := range certs {
 		hn := hostFromPath(cert.path)
+		if !n.ssOracle.ShipToProxy(hn) {
+			// skip
+			continue
+		}
+		if strings.TrimSpace(cert.Certificate) == "" {
+			// not issued yet, skip
+			continue
+		}
+
 		he := hex.EncodeToString([]byte(hn))
 
 		certBytes := []byte(strings.Join([]string{
@@ -99,6 +116,7 @@ func createTarball(certs []*credhubCert) ([]byte, error) {
 			Mode:     0600,
 			Size:     int64(len(certBytes)),
 			Typeflag: tar.TypeReg,
+			ModTime:  cert.dateCreated,
 		})
 		if err != nil {
 			return nil, err
@@ -122,7 +140,7 @@ func createTarball(certs []*credhubCert) ([]byte, error) {
 }
 
 func (n *outputObserver) CertsAreUpdated(certs []*credhubCert) error {
-	tb, err := createTarball(certs)
+	tb, err := n.createTarball(certs)
 	if err != nil {
 		return err
 	}

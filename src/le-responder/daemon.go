@@ -9,7 +9,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"net/url"
 	"sort"
 	"time"
 
@@ -29,6 +28,10 @@ type certSource interface {
 	SupportsManual() bool
 }
 
+type shouldShipOracle interface {
+	ShipToProxy(hostname string) bool
+}
+
 type certRenewer interface {
 	RenewCertNow(hostname, cs string) error
 	CanDelete(hostname string) bool
@@ -46,11 +49,12 @@ type daemonConf struct {
 	} `yaml:"bootstrap"`
 
 	fixedHosts []string
+	ourHN      string
 	storage    certStorage
 
 	certFactories map[string]certSource
 	sources       []string
-	observer      certObserver
+	observers     []certObserver
 
 	updateRequests chan bool
 }
@@ -67,7 +71,7 @@ func (dc *daemonConf) SourceCanManual(cs string) bool {
 	return cf.SupportsManual()
 }
 
-func (dc *daemonConf) Init(extAdminURL string, sm sourceMap, storage certStorage, observer certObserver, responder responder) error {
+func (dc *daemonConf) Init(ourHostname string, sm sourceMap, storage certStorage, observers []certObserver, responder responder) error {
 	dc.updateRequests = make(chan bool, 1000)
 
 	if dc.Period == 0 {
@@ -77,17 +81,11 @@ func (dc *daemonConf) Init(extAdminURL string, sm sourceMap, storage certStorage
 		return errors.New("days before must be specified and non-zero. should be in days")
 	}
 
-	u, err := url.Parse(extAdminURL)
-	if err != nil {
-		return err
+	dc.ourHN = ourHostname
+	dc.fixedHosts = []string{
+		"proxy-bootstrap", // do first, in case we take longer
+		ourHostname,
 	}
-
-	hn := u.Hostname()
-	if hn == "" {
-		return errors.New("admin external url must be specified")
-	}
-
-	dc.fixedHosts = []string{hn}
 
 	dc.certFactories = make(map[string]certSource)
 	dc.sources = nil
@@ -102,7 +100,7 @@ func (dc *daemonConf) Init(extAdminURL string, sm sourceMap, storage certStorage
 				PrivateKey:      val.PrivateKey,
 				responderServer: responder,
 			}
-			err = v.Init()
+			err := v.Init()
 			if err != nil {
 				return err
 			}
@@ -123,7 +121,7 @@ func (dc *daemonConf) Init(extAdminURL string, sm sourceMap, storage certStorage
 
 	sort.StringSlice(dc.sources).Sort()
 
-	dc.observer = observer
+	dc.observers = observers
 
 	return nil
 }
@@ -133,20 +131,39 @@ func (dc *daemonConf) updateObservers() error {
 	if err != nil {
 		return err
 	}
-	return dc.observer.CertsAreUpdated(certs)
+	var retErr error
+	for _, ob := range dc.observers {
+		err = ob.CertsAreUpdated(certs)
+		if err != nil {
+			log.Println("erroring updating cert observer, will continue to next but still return failed:", err)
+			retErr = err
+		}
+	}
+	return retErr
 }
 
 func (dc *daemonConf) RunForever() {
 	// Periodic scan loop, this will ping the update request queue
 	go func() {
+		bootstrapped := false
 		for {
+			nextSleepSeconds := time.Duration(dc.Period)
+
 			log.Println("starting periodic scan...")
 			err := dc.periodicScan()
-			if err != nil {
+			if err == nil {
+				log.Println("finished successfully")
+				bootstrapped = true
+			} else {
 				log.Println("error in periodic scan, ignoring:", err)
+				if credhub.IsCommsRelatedError(err) && !bootstrapped {
+					log.Println("looks like a comms related issue, we'll reduce our sleep time")
+					nextSleepSeconds = 15
+				}
 			}
-			log.Println("finished, sleeping...")
-			time.Sleep(time.Second * time.Duration(dc.Period))
+
+			log.Printf("sleeping for %d...\n", nextSleepSeconds)
+			time.Sleep(time.Second * nextSleepSeconds)
 		}
 	}()
 
@@ -185,19 +202,26 @@ func (dc *daemonConf) renewCertIfNeeded(hostname string) error {
 	needNew := false
 
 	chc, err := dc.storage.LoadPath(path)
-	switch err {
-	case nil:
-		// all good, continue
-	case credhub.ErrCredNotFound:
-		needNew = true
-	default:
-		return err
+	if err != nil {
+		if credhub.IsNotFoundError(err) {
+			needNew = true
+			chc = nil
+		} else {
+			return err
+		}
 	}
 
 	sourceToUse := dc.Bootstrap.Source
 
+	// Note that if a certificate already exists, we won't try to renew it unless there
+	// is already a certificate that exists. In that manner new certs won't attempt to be renewed
+	// until we're ready. (e.g. while waiting for a DNS response)
 	if chc != nil {
 		sourceToUse = chc.Source
+
+		if chc.Challenge != nil {
+			return errors.New("challenge not empty, we will not try to auto renew, please use console to do manually")
+		}
 
 		block, _ := pem.Decode([]byte(chc.Certificate))
 		if block == nil {
@@ -212,11 +236,11 @@ func (dc *daemonConf) renewCertIfNeeded(hostname string) error {
 			return err
 		}
 
-		if pc.NotAfter.Before(time.Now().Add(24 * time.Hour * time.Duration(dc.DaysBefore))) {
-			needNew = true
+		if pc.NotAfter.Before(time.Now()) {
+			return errors.New("cert already expired, we won't try to auto-renew. do so manually via console")
 		}
 
-		if chc.NeedsNew {
+		if pc.NotAfter.Before(time.Now().Add(24 * time.Hour * time.Duration(dc.DaysBefore))) {
 			needNew = true
 		}
 	}
@@ -237,9 +261,13 @@ func (dc *daemonConf) CanDelete(hostname string) bool {
 	return !dc.isFixedHost(hostname)
 }
 
+func (dc *daemonConf) ShipToProxy(hostname string) bool {
+	return hostname != dc.ourHN
+}
+
 func (dc *daemonConf) isFixedHost(hostname string) bool {
-	for _, fh := range dc.fixedHosts {
-		if hostname == fh {
+	for _, hn := range dc.fixedHosts {
+		if hn == hostname {
 			return true
 		}
 	}
@@ -355,7 +383,17 @@ func (dc *daemonConf) RenewCertNow(hostname, cs string) error {
 func (dc *daemonConf) periodicScan() error {
 	var retErr error
 
-	// First handle fixed hosts
+	// First, fetch the list of certs.
+	// We do this first to ensure our storage layer is up before we try to communicate with
+	// any of our CA sources
+
+	// Next fetch all certs, and renew
+	certsToDealWith, err := dc.storage.FetchCerts()
+	if err != nil {
+		return err
+	}
+
+	// Now ignore it, and handle our fixed hosts
 	for _, fh := range dc.fixedHosts {
 		err := dc.renewCertIfNeeded(fh)
 		if err != nil {
@@ -364,11 +402,7 @@ func (dc *daemonConf) periodicScan() error {
 		}
 	}
 
-	// Next fetch all certs, and renew
-	certsToDealWith, err := dc.storage.FetchCerts()
-	if err != nil {
-		return err
-	}
+	// And now handle the rest.
 	for _, cert := range certsToDealWith {
 		hn := hostFromPath(cert.path)
 		if !dc.isFixedHost(hn) { // we just did these above

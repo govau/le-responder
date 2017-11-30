@@ -2,7 +2,7 @@
 name: le-responder
 
 dependencies:
-- golang
+- golang-1.9-linux
 
 files:
 - le-responder/**/*.go

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
@@ -10,6 +11,8 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/csrf"
@@ -35,42 +38,76 @@ type adminServer struct {
 	cookies     *sessions.CookieStore
 	storage     certStorage
 	certRenewer certRenewer
+	ourHostname string
+
+	ourCertMutex sync.RWMutex
+	ourCert      *tls.Certificate
 }
 
-func (as *adminServer) Init(storage certStorage, certRenewer certRenewer) error {
+func (as *adminServer) Init(storage certStorage, certRenewer certRenewer, ourHostname string) error {
 	as.cookies = uaa.MustCreateBasicCookieHandler(false)
 	as.storage = storage
 	as.certRenewer = certRenewer
+	as.ourHostname = ourHostname
 	return nil
 }
 
-func (as *adminServer) RunForever() {
-	// Start admin server, we care less if this fails, so we'll get the process on the responder
-	err := http.ListenAndServe(fmt.Sprintf(":%d", as.Port), (&uaa.LoginHandler{
-		Cookies: as.cookies,
-		UAA: &uaa.Client{
-			URL:          as.UAA.InternalURL,
-			CACerts:      as.UAA.CACerts,
-			ClientID:     as.UAA.ClientID,
-			ClientSecret: as.UAA.ClientSecret,
-			ExternalURL:  as.UAA.ExternalURL,
-		},
-		Scopes: []string{
-			"openid",
-		},
-		AllowedUsers:   as.AllowedUsers,
-		BaseURL:        as.ExternalURL,
-		ExternalUAAURL: as.UAA.ExternalURL,
-		Logger:         log.New(os.Stderr, "", log.LstdFlags),
-		ShouldIgnore: func(r *http.Request) bool {
-			if r.URL.Path == "/favicon.ico" {
-				return true
-			}
-			return false
-		},
-	}).Wrap(as.createAdminHandler()))
+func (as *adminServer) CertsAreUpdated(certs []*credhubCert) error {
+	for _, cert := range certs {
+		hn := hostFromPath(cert.path)
+		if hn != as.ourHostname {
+			// skip, not us
+			continue
+		}
+		tlsCert, err := tls.X509KeyPair([]byte(fmt.Sprintf("%s\n%s\n", strings.TrimSpace(cert.Certificate), strings.TrimSpace(cert.CA))), []byte(cert.PrivateKey))
+		if err != nil {
+			return err
+		}
+		as.ourCertMutex.Lock()
+		as.ourCert = &tlsCert
+		as.ourCertMutex.Unlock()
+		return nil
+	}
+	return nil // noop
+}
 
-	log.Println("admin server unexpected exit:", err)
+func (as *adminServer) RunForever() {
+	log.Println("admin server exit:", (&http.Server{
+		Addr: fmt.Sprintf(":%d", as.Port),
+		Handler: (&uaa.LoginHandler{
+			Cookies: as.cookies,
+			UAA: &uaa.Client{
+				URL:          as.UAA.InternalURL,
+				CACerts:      as.UAA.CACerts,
+				ClientID:     as.UAA.ClientID,
+				ClientSecret: as.UAA.ClientSecret,
+				ExternalURL:  as.UAA.ExternalURL,
+			},
+			Scopes: []string{
+				"openid",
+			},
+			AllowedUsers:   as.AllowedUsers,
+			BaseURL:        as.ExternalURL,
+			ExternalUAAURL: as.UAA.ExternalURL,
+			Logger:         log.New(os.Stderr, "", log.LstdFlags),
+			ShouldIgnore: func(r *http.Request) bool {
+				if r.URL.Path == "/favicon.ico" {
+					return true
+				}
+				return false
+			},
+		}).Wrap(as.createAdminHandler()),
+		TLSConfig: &tls.Config{
+			GetCertificate: func(chi *tls.ClientHelloInfo) (*tls.Certificate, error) {
+				as.ourCertMutex.RLock()
+				defer as.ourCertMutex.RUnlock()
+				if as.ourCert == nil {
+					return nil, errors.New("we don't have a cert yet")
+				}
+				return as.ourCert, nil
+			},
+		},
+	}).ListenAndServeTLS("", "")) // we can leave empty as we already have set via tls.Config
 }
 
 func (as *adminServer) add(vars map[string]string, liu *uaa.LoggedInUser, w http.ResponseWriter, r *http.Request) (map[string]interface{}, error) {
@@ -225,7 +262,6 @@ func (as *adminServer) update(vars map[string]string, liu *uaa.LoggedInUser, w h
 		}
 
 		existing.Source = source
-		existing.NeedsNew = true
 
 		err = as.storage.SavePath(path, existing)
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/url"
+	"time"
 
 	"github.com/govau/cf-common/credhub"
 )
@@ -19,13 +20,13 @@ type certStorage interface {
 type credhubCert struct {
 	Source      string         `json:"source"` // as defined by type
 	Type        string         `json:"type"`   // "admin" or ?
-	NeedsNew    bool           `json:"needs_new"`
 	CA          string         `json:"ca"`
 	Certificate string         `json:"certificate"`
 	PrivateKey  string         `json:"private_key"`
 	Challenge   *acmeChallenge `json:"challenge"`
 
-	path string // set for convenience of callers, but not stored
+	path        string    // set for convenience of callers, but not stored
+	dateCreated time.Time // set by CredHub automatically, set by us when pulling out
 }
 
 func pathFromHost(hostname string) string {
@@ -119,7 +120,8 @@ func (cs *certStore) FetchHostnames() ([]string, error) {
 func (cs *certStore) LoadPath(path string) (*credhubCert, error) {
 	var cr2 struct {
 		Data []struct {
-			Value credhubCert `json:"value"`
+			Value       credhubCert `json:"value"`
+			DateCreated time.Time   `json:"version_created_at"`
 		} `json:"data"`
 	}
 	err := cs.CredHub.MakeRequest("/api/v1/data", url.Values{
@@ -136,6 +138,7 @@ func (cs *certStore) LoadPath(path string) (*credhubCert, error) {
 
 	rv := cr2.Data[0].Value
 	rv.path = path
+	rv.dateCreated = cr2.Data[0].DateCreated
 
 	return &rv, nil
 }

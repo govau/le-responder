@@ -2,7 +2,7 @@
 - type: replace
   path: /releases/-
   value:
-    name: le-responder
+    name: acme-proxy
     version: latest
 
 # Pull in latest version of CredHub for our instance
@@ -69,8 +69,9 @@
               le-responder:
                 name: le-responder
                 check: {} # TODO, healthcheck
+                
     - name: le-responder
-      release: le-responder
+      release: acme-proxy
       properties:
         config:
           sources:
@@ -107,7 +108,7 @@
           outputs:
             s3:
             - bucket: ((leresponder_output_bucket))
-              object: certs.tgz
+              object: le-responder/current-certificates.tgz
               access_key: ((leresponder_output_iam_key))
               access_secret: ((leresponder_output_iam_secret))
 

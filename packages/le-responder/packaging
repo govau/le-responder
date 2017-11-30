@@ -2,7 +2,7 @@ set -eu
 
 JOB=le-responder
 
-export GOROOT=$(readlink -nf /var/vcap/packages/golang)
+export GOROOT=$(readlink -nf /var/vcap/packages/golang-1.9-linux)
 export PATH=$GOROOT/bin:$PATH
 export GOPATH=${BOSH_COMPILE_TARGET}/${JOB}
 
