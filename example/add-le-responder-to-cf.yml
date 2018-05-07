@@ -2,21 +2,24 @@
 - type: replace
   path: /releases/-
   value:
-    name: acme-proxy
-    version: latest
+    name: le-responder
+    version: "1.4.0"
+    sha1: "b2e23288270cc2ca644beb201171939ef291a98f"
+    url: "https://github.com/govau/le-responder/releases/download/v1.4.0/le-responder-1.4.0.tgz"
 
 # Pull in latest version of CredHub for our instance
 - type: replace
   path: /releases/-
   value:
     name: credhub
-    url: https://bosh.io/d/github.com/pivotal-cf/credhub-release?v=1.6.1
-    version: 1.6.1
-    sha1: 5b3a4ff2cd51d6167bc53eeb8abd47b292e2186f
+    version: "1.8.3"
+    url: "https://bosh.io/d/github.com/pivotal-cf/credhub-release?v=1.8.3"
+    sha1: "232cf1001e685371fe74c2630fa8115ebaf1f2a7"
 
 # Create MySQL database for CredHub
+# Create MySQL database for CredHub
 - type: replace
-  path: /instance_groups/name=singleton-database/jobs/name=mysql/properties/cf_mysql/mysql/seeded_databases/-
+  path: /instance_groups/name=database/jobs/name=mysql/properties/cf_mysql/mysql/seeded_databases/-
   value:
     name: tlscredhub
     username: tlscredhub
@@ -41,9 +44,9 @@
     name: acme_staging_key
     type: rsa
 
-# Instantiate CredHub instance
+# Instantiate CredHub instance, do it just before the router
 - type: replace
-  path: /instance_groups/-
+  path: /instance_groups/name=router:before
   value:
     name: tls-credhub
     instances: 1
@@ -69,9 +72,8 @@
               le-responder:
                 name: le-responder
                 check: {} # TODO, healthcheck
-                
     - name: le-responder
-      release: acme-proxy
+      release: le-responder
       properties:
         config:
           sources:
@@ -91,7 +93,7 @@
           daemon:
             bootstrap:
               source: self-signed
-            days_before: 30
+            days_before: 32 # bump a little higher than 30 as many checks hardcode 30.
             period: 86400
 
           data:
@@ -105,19 +107,20 @@
               credhub_ca_certificates:
               - ((tls_credhub_ca.certificate))
 
-          outputs:
+          output:
             s3:
             - bucket: ((leresponder_output_bucket))
+              region: ap-southeast-2
               object: le-responder/current-certificates.tgz
               access_key: ((leresponder_output_iam_key))
               access_secret: ((leresponder_output_iam_secret))
 
           servers:
             acme_responder:
-              port: 8478
+              port: 80
 
             admin_ui:
-              port: 8427
+              port: 443
               uaa:
                 client_id: le-responder-user-client
                 client_secret: ((le-responder-user-client-secret))
@@ -126,10 +129,9 @@
                 ca_certs:
                 - ((uaa_ca.certificate))
               csrf_key: ((le-responder-csrf-key))
-              external_url: https://((certs_le_external_domain))
+              external_url: ((leresponder_external_url))
               allowed_users:
               - admin
-
     - name: credhub
       release: credhub
       properties:
@@ -203,7 +205,7 @@
     authorized-grant-types: authorization_code,refresh_token
     secret: ((le-responder-user-client-secret))
     access_token_validity: 3600
-    redirect-uri: https://((certs_le_external_domain))/oauth2callback
+    redirect-uri: ((leresponder_external_url))/oauth2callback
 
 - type: replace
   path: /variables/-
