@@ -6,4 +6,3 @@ dependencies:
 
 files:
 - le-responder/**/*.go
-- le-responder/**/*.s
