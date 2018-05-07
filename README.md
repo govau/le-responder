@@ -14,7 +14,7 @@ There are a number of moving parts:
 
 Typically both `le-responder` and `credhub` are deployed on a singleton instance as part of a CloudFoundry deployment.
 
-The (add-le-responder-to-cf.yml)[example/add-le-responder-to-cf.yml] operator file creates such an instance, and also sets up the appropriate linkages with the `cf` `uaa`, and creates a database for use with the dedicated `credhub` installation.
+The [add-le-responder-to-cf.yml](./example/add-le-responder-to-cf.yml) operator file creates such an instance, and also sets up the appropriate linkages with the `cf` `uaa`, and creates a database for use with the dedicated `credhub` installation.
 
 You will also probably want to set an external IP address for this instance, such as with:
 
