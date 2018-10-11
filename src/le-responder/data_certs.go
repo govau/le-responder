@@ -59,12 +59,10 @@ func (cs *certStore) SavePath(path string, chc *credhubCert) error {
 	return cs.CredHub.PutRequest("/api/v1/data", struct {
 		Name  string       `json:"name"`
 		Type  string       `json:"type"`
-		Mode  string       `json:"mode"`
 		Value *credhubCert `json:"value"`
 	}{
 		Name:  path,
 		Type:  "json",
-		Mode:  "overwrite",
 		Value: chc,
 	}, &ignoreMe)
 }
