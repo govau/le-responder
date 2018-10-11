@@ -57,15 +57,15 @@ func (cs *certStore) DeletePath(path string) error {
 func (cs *certStore) SavePath(path string, chc *credhubCert) error {
 	var ignoreMe map[string]interface{}
 	return cs.CredHub.PutRequest("/api/v1/data", struct {
-		Name      string       `json:"name"`
-		Type      string       `json:"type"`
-		Overwrite bool         `json:"overwrite"`
-		Value     *credhubCert `json:"value"`
+		Name  string       `json:"name"`
+		Type  string       `json:"type"`
+		Mode  string       `json:"mode"`
+		Value *credhubCert `json:"value"`
 	}{
-		Name:      path,
-		Type:      "json",
-		Overwrite: true,
-		Value:     chc,
+		Name:  path,
+		Type:  "json",
+		Mode:  "overwrite",
+		Value: chc,
 	}, &ignoreMe)
 }
 
