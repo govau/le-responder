@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
@@ -51,7 +52,13 @@ func (b *bucket) Put(data []byte) error {
 	if b.awsSession == nil {
 		var creds *credentials.Credentials
 		if b.AccessKey == "" { // if not specified, assume EC2RoleProvider
-			creds = credentials.NewCredentials(&ec2rolecreds.EC2RoleProvider{})
+			sessionForMetadata, err := session.NewSession()
+			if err != nil {
+				return err
+			}
+			creds = credentials.NewCredentials(&ec2rolecreds.EC2RoleProvider{
+				Client: ec2metadata.New(sessionForMetadata),
+			})
 		} else {
 			creds = credentials.NewStaticCredentials(b.AccessKey, b.AccessSecret, "")
 		}
