@@ -11,6 +11,7 @@ import (
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 )
@@ -48,9 +49,15 @@ func (b *bucket) Put(data []byte) error {
 	}
 
 	if b.awsSession == nil {
+		var creds *credentials.Credentials
+		if b.AccessKey == "" { // if not specified, assume EC2RoleProvider
+			creds = credentials.NewCredentials(&ec2rolecreds.EC2RoleProvider{})
+		} else {
+			creds = credentials.NewStaticCredentials(b.AccessKey, b.AccessSecret, "")
+		}
 		sess, err := session.NewSession(&aws.Config{
 			Region:      aws.String(b.Region),
-			Credentials: credentials.NewStaticCredentials(b.AccessKey, b.AccessSecret, ""),
+			Credentials: creds,
 		})
 		if err != nil {
 			return err
