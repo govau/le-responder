@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/pem"
 	"errors"
 	"log"
@@ -71,6 +72,7 @@ func (a *acmObs) getARNforHost(hn string) (string, error) {
 		MaxItems: aws.Int64(100),
 	}, func(page *acm.ListCertificatesOutput, lastPage bool) bool {
 		for _, cert := range page.CertificateSummaryList {
+			log.Printf("Found existing cert for: %s with ARN: %s", *cert.DomainName, *cert.CertificateArn)
 			a.arns[*cert.DomainName] = a.arns[*cert.CertificateArn]
 		}
 		return true
@@ -175,8 +177,9 @@ func (a *acmObs) Import(cert *credhubCert) error {
 	}
 
 	// Check if we can avoid writing a new cert
+	var liveFP []byte
 	if arn != "" {
-		liveFP, err := a.getCurrentFingerprint(arn)
+		liveFP, err = a.getCurrentFingerprint(arn)
 		if err != nil {
 			return err
 		}
@@ -188,7 +191,7 @@ func (a *acmObs) Import(cert *credhubCert) error {
 	}
 
 	// Finally, import the cert, update the fingerprint map
-	log.Printf("Updating ACM cert for: %s in ARN: %s", hn, arn)
+	log.Printf("Updating ACM cert for: %s in ARN: %s (fingerprint: %s, previous fingerprint: %s)", hn, arn, hex.EncodeToString(currentFP), hex.EncodeToString(liveFP))
 	ici := &acm.ImportCertificateInput{
 		Certificate:      []byte(cert.Certificate),
 		CertificateChain: []byte(cert.CA),
