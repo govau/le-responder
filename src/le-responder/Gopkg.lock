@@ -2,7 +2,7 @@
 
 
 [[projects]]
-  digest = "1:498c577b148d412e74926efbaf86007a8f073bb4c2871339e830a21b40a11e66"
+  digest = "1:da0a0ec9d8e3d78b6dbc4fe5edb8fcdcb437cb4bc85fe9b87156b706b7a64530"
   name = "github.com/aws/aws-sdk-go"
   packages = [
     "aws",
@@ -25,11 +25,14 @@
     "internal/sdkrand",
     "internal/shareddefaults",
     "private/protocol",
+    "private/protocol/json/jsonutil",
+    "private/protocol/jsonrpc",
     "private/protocol/query",
     "private/protocol/query/queryutil",
     "private/protocol/rest",
     "private/protocol/restxml",
     "private/protocol/xml/xmlutil",
+    "service/acm",
     "service/s3",
     "service/s3/s3iface",
     "service/s3/s3manager",
@@ -146,6 +149,7 @@
     "github.com/aws/aws-sdk-go/aws/credentials/ec2rolecreds",
     "github.com/aws/aws-sdk-go/aws/ec2metadata",
     "github.com/aws/aws-sdk-go/aws/session",
+    "github.com/aws/aws-sdk-go/service/acm",
     "github.com/aws/aws-sdk-go/service/s3/s3manager",
     "github.com/gorilla/csrf",
     "github.com/gorilla/mux",

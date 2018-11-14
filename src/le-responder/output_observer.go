@@ -90,7 +90,8 @@ func (b *bucket) Put(data []byte) error {
 }
 
 type outputObserver struct {
-	S3 []*bucket `yaml:"s3"`
+	S3  []*bucket `yaml:"s3"`
+	ACM []*acmObs `yaml:"acm"`
 
 	ssOracle shouldShipOracle
 }
@@ -163,6 +164,15 @@ func (n *outputObserver) CertsAreUpdated(certs []*credhubCert) error {
 		err = bucket.Put(tb)
 		if err != nil {
 			return err
+		}
+	}
+
+	for _, acm := range n.ACM {
+		for _, cert := range certs {
+			err = acm.Import(cert)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
