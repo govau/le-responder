@@ -19,6 +19,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
 	"github.com/govau/cf-common/uaa"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type adminServer struct {
@@ -91,10 +92,12 @@ func (as *adminServer) RunForever() {
 			ExternalUAAURL: as.UAA.ExternalURL,
 			Logger:         log.New(os.Stderr, "", log.LstdFlags),
 			ShouldIgnore: func(r *http.Request) bool {
-				if r.URL.Path == "/favicon.ico" {
+				switch r.URL.Path {
+				case "/favicon.ico", "/metrics":
 					return true
+				default:
+					return false
 				}
-				return false
 			},
 		}).Wrap(as.createAdminHandler()),
 		TLSConfig: &tls.Config{
@@ -394,6 +397,9 @@ func (as *adminServer) createAdminHandler() http.Handler {
 	r.HandleFunc("/add", as.wrapWithClient("add.html", as.add))
 	r.HandleFunc("/source", as.wrapWithClient("source.html", as.source))
 	r.HandleFunc("/update", as.wrapWithClient("", as.update)) // will redirect back to home
+
+	// This URL is not secured, and excluded in the wrapper earlier
+	r.Handle("/metrics", promhttp.Handler())
 
 	// TODO, check whether cast is really the right thing here...
 	return csrf.Protect([]byte(as.CSRFKey))(r)

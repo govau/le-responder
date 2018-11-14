@@ -155,6 +155,7 @@ func (dc *daemonConf) RunForever() {
 				log.Println("finished successfully")
 				bootstrapped = true
 			} else {
+				metricErrors.WithLabelValues("fetching_certs").Inc()
 				log.Println("error in periodic scan, ignoring:", err)
 				if credhub.IsCommsRelatedError(err) && !bootstrapped {
 					log.Println("looks like a comms related issue, we'll reduce our sleep time")
@@ -189,6 +190,7 @@ func (dc *daemonConf) RunForever() {
 			if err == nil {
 				log.Println("updating observers completed successfully.")
 			} else {
+				metricErrors.WithLabelValues("updating_aws").Inc()
 				log.Printf("error updating observers, will try again soon: %s\n", err)
 				dc.updateRequests <- true
 			}
