@@ -17,7 +17,8 @@ import (
 )
 
 type acmObs struct {
-	Region string `yaml:"region"`
+	Region  string   `yaml:"region"`
+	Sources []string `yaml:"source"` // only certs matching sources will be added
 
 	// Recommend leaving empty and will use IAM role instead:
 	AccessKey    string `yaml:"access_key"`
@@ -139,6 +140,17 @@ func certFingerprint(c []byte) ([]byte, error) {
 }
 
 func (a *acmObs) Import(cert *credhubCert) error {
+	found := false
+	for _, s := range a.Sources {
+		if s == cert.Source {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil // ignore, we don't want to store
+	}
+
 	a.awsMutex.Lock()
 	defer a.awsMutex.Unlock()
 
