@@ -73,7 +73,7 @@ func (a *acmObs) getARNforHost(hn string) (string, error) {
 	}, func(page *acm.ListCertificatesOutput, lastPage bool) bool {
 		for _, cert := range page.CertificateSummaryList {
 			log.Printf("Found existing cert for: %s with ARN: %s", *cert.DomainName, *cert.CertificateArn)
-			a.arns[*cert.DomainName] = a.arns[*cert.CertificateArn]
+			a.arns[*cert.DomainName] = *cert.CertificateArn
 		}
 		return true
 	})
