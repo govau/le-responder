@@ -152,9 +152,11 @@ func (dc *daemonConf) RunForever() {
 			log.Println("starting periodic scan...")
 			err := dc.periodicScan()
 			if err == nil {
+				metricHealth.WithLabelValues("fetching_certs").Set(0) // healthy
 				log.Println("finished successfully")
 				bootstrapped = true
 			} else {
+				metricHealth.WithLabelValues("fetching_certs").Set(1) // unhealthy
 				metricErrors.WithLabelValues("fetching_certs").Inc()
 				log.Println("error in periodic scan, ignoring:", err)
 				if credhub.IsCommsRelatedError(err) && !bootstrapped {
@@ -188,8 +190,10 @@ func (dc *daemonConf) RunForever() {
 			log.Println("updating observers...")
 			err := dc.updateObservers()
 			if err == nil {
+				metricHealth.WithLabelValues("updating_aws").Set(0) // healthy
 				log.Println("updating observers completed successfully.")
 			} else {
+				metricHealth.WithLabelValues("updating_aws").Set(1) // unhealthy
 				metricErrors.WithLabelValues("updating_aws").Inc()
 				log.Printf("error updating observers, will try again soon: %s\n", err)
 				dc.updateRequests <- true
@@ -369,6 +373,7 @@ func (dc *daemonConf) getCertAndSave(hostname, cs string, issuer func(context.Co
 	if err != nil {
 		return err
 	}
+	metricIssued.WithLabelValues(cs).Inc()
 
 	// yo, we got a cert
 	dc.updateRequests <- true
