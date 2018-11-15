@@ -4,7 +4,7 @@ import "github.com/prometheus/client_golang/prometheus"
 
 var (
 	metricErrors = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Name: "errors_total",
+		Name: "le_responder_errors_total",
 	}, []string{"task"})
 )
 
