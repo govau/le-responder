@@ -43,7 +43,7 @@
             {{ range .certs }}
                 <tr>
                     <td><a href="https://{{ .Name }}">{{ .Name }}</a></td>
-                    <td>{{ .DaysRemaining }}</td>
+                    <td {{ if lt .DaysRemaining 30 }} style="color:red" {{ end }}>{{ .DaysRemaining }}</td>
                     <td>{{ .CredHubCert.Source }} [ <a href="#" onclick="return doItS('source','{{ .Path }}');">Change</a> ]</td>
                     <td>
                         {{ if .CredHubCert.Challenge }}
