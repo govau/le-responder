@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 )
 
 type serverResponder struct {
@@ -35,19 +36,26 @@ func (sr *serverResponder) ClearChallengeValue(k string) {
 }
 
 func (sr *serverResponder) RunForever() {
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", sr.Port), http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/" {
-			// Convenience for admins who accidentally drop the https
-			http.Redirect(w, r, sr.uiManager, http.StatusMovedPermanently)
-			return
-		}
-		sr.challengeMutex.RLock()
-		v, ok := sr.challengeResponse[r.URL.Path]
-		sr.challengeMutex.RUnlock()
-		if !ok {
-			http.NotFound(w, r)
-			return
-		}
-		w.Write(v)
-	})))
+	log.Fatal((&http.Server{
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  10 * time.Second, // we recently ended up with a huge amount of conns left open
+		Addr:         fmt.Sprintf(":%d", sr.Port),
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/" {
+				// Convenience for admins who accidentally drop the https
+				http.Redirect(w, r, sr.uiManager, http.StatusMovedPermanently)
+				return
+			}
+			sr.challengeMutex.RLock()
+			v, ok := sr.challengeResponse[r.URL.Path]
+			sr.challengeMutex.RUnlock()
+			if !ok {
+				log.Printf("404 %s", r.URL.String())
+				http.NotFound(w, r)
+				return
+			}
+			w.Write(v)
+		}),
+	}).ListenAndServe())
 }
