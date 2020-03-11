@@ -4,19 +4,19 @@ resource_types:
   type: docker-image
   source:
     repository: cloudfoundry/bosh-deployment-resource
-    tag: v2.8.1
+    tag: v2.13.1
 - name: slack-notification
   type: docker-image
   source:
     repository: cfcommunity/slack-notification-resource
-    tag: v1.3.1
+    tag: v1.5.0
 
 resources:
 - name: git
   type: git
   source:
     uri: git@github.com:govau/le-responder.git
-    private_key: {{git_private_key}}
+    private_key: ((git_private_key.private_key))
     branch: master
     ignore_paths:
     - releases/*
@@ -25,14 +25,14 @@ resources:
   type: git
   source:
     uri: git@github.com:govau/le-responder.git
-    private_key: {{git_private_key}}
+    private_key: ((git_private_key.private_key))
     branch: master
 - name: github-release
   type: github-release
   source:
     owner: govau
     repository: le-responder
-    access_token: {{git_personal_access_token}}
+    access_token: ((github-public-repo-personal-access-token))
 - name: version
   type: semver
   source:
@@ -41,11 +41,11 @@ resources:
     branch: master
     file: le-responder.version
     initial_version: 1.0.0
-    private_key: {{git_boshreleases_private_key}}
+    private_key: ((git_boshreleases_private_key.private_key))
 - name: slack
   type: slack-notification
   source:
-    url: {{slack-webhook-url}}
+    url: ((slack-webhook-url))
 
 
 jobs:
@@ -62,8 +62,8 @@ jobs:
     file: git/ci/create-bosh-release.yml
     params:
       bosh_release_name: le-responder
-      access_key_id: {{boshrelease_s3_bucket_access_key_id}}
-      secret_access_key: {{boshrelease_s3_bucket_secret_access_key}}
+      access_key_id: ((boshrelease_s3_bucket_access_key_id))
+      secret_access_key: ((boshrelease_s3_bucket_secret_access_key))
 
   - put: version
     params:

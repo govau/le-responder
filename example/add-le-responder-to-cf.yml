@@ -17,7 +17,6 @@
     sha1: "232cf1001e685371fe74c2630fa8115ebaf1f2a7"
 
 # Create MySQL database for CredHub
-# Create MySQL database for CredHub
 - type: replace
   path: /instance_groups/name=database/jobs/name=mysql/properties/cf_mysql/mysql/seeded_databases/-
   value:
