@@ -15,6 +15,11 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dmksnnk/sentryhook"
+	"github.com/meatballhat/negroni-logrus"
+	"github.com/sirupsen/logrus"
+	"github.com/urfave/negroni"
+
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/sessions"
@@ -73,6 +78,17 @@ func (as *adminServer) CertsAreUpdated(certs []*credhubCert) error {
 }
 
 func (as *adminServer) RunForever() {
+	// logging setup
+	customFormatter := new(logrus.TextFormatter)
+	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
+	logrus.SetFormatter(customFormatter)
+	customFormatter.FullTimestamp = true
+
+	hook := sentryhook.New(nil)                        // will use raven.DefaultClient, or provide custom client
+	hook.SetAsync(logrus.ErrorLevel)                   // async (non-blocking) hook for errors
+	hook.SetSync(logrus.PanicLevel, logrus.FatalLevel) // sync (blocking) for fatal stuff
+	logrus.AddHook(hook)
+
 	log.Println("admin server exit:", (&http.Server{
 		Addr: fmt.Sprintf(":%d", as.Port),
 		Handler: (&uaa.LoginHandler{
@@ -402,5 +418,21 @@ func (as *adminServer) createAdminHandler() http.Handler {
 	r.Handle("/metrics", promhttp.Handler())
 
 	// TODO, check whether cast is really the right thing here...
-	return csrf.Protect([]byte(as.CSRFKey))(r)
+
+	n := negroni.New()
+	nl := negronilogrus.NewMiddlewareFromLogger(logrus.StandardLogger(), "web")
+	nl.Before = func(entry *logrus.Entry, req *http.Request, remoteAddr string) *logrus.Entry {
+		return entry.WithFields(logrus.Fields{
+			"request":   req.RequestURI,
+			"hostname":  req.Host,
+			"userAgent": req.UserAgent(),
+			"method":    req.Method,
+			"remote":    remoteAddr,
+		})
+	}
+	n.Use(nl)
+	n.Use(negroni.NewRecovery())
+	n.UseHandler(r)
+
+	return csrf.Protect([]byte(as.CSRFKey))(n)
 }
