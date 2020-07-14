@@ -9,7 +9,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"sync"
 
 	"golang.org/x/crypto/acme"
@@ -153,45 +153,66 @@ func (acs *acmeCertSource) AutoFetchCert(ctx context.Context, pkey *rsa.PrivateK
 	defer acs.lock.Unlock()
 
 	acs.ensureRegistered(ctx)
-	authz, err := acs.acmeClient.Authorize(ctx, hostname)
+	o, err := acs.acmeClient.AuthorizeOrder(ctx, acme.DomainIDs(hostname))
 	if err != nil {
 		return nil, err
 	}
-	if authz.Status == acme.StatusValid {
-		log.Println("already valid!")
-	} else {
-		var chal *acme.Challenge
-		for _, c := range authz.Challenges {
-			if c.Type == "http-01" {
-				chal = c
-				break
+	// Remove all hanging authorizations to reduce rate limit quotas
+	// after we're done.
+	//defer func() {
+	//	go m.deactivatePendingAuthz(o.AuthzURLs)
+	//}()
+
+	//if err == nil && z.Status == acme.StatusPending {
+	//	client.RevokeAuthorization(ctx, u)
+	//}
+	if o.Status == acme.StatusReady {
+		log.Println("order already validated!")
+	} else if o.Status == acme.StatusPending {
+		// Satisfy all pending authorizations.
+		for _, zurl := range o.AuthzURLs {
+			z, err := acs.acmeClient.GetAuthorization(ctx, zurl)
+			var chal *acme.Challenge
+			for _, c := range z.Challenges {
+				if c.Type == "http-01" {
+					chal = c
+					break
+				}
+			}
+			if chal == nil {
+				return nil, errors.New("no supported challenge type found")
+			}
+
+			k := acs.acmeClient.HTTP01ChallengePath(chal.Token)
+			v, err := acs.acmeClient.HTTP01ChallengeResponse(chal.Token)
+			if err != nil {
+				return nil, err
+			}
+
+			defer acs.responderServer.ClearChallengeValue(k)
+			acs.responderServer.SetChallengeValue(k, []byte(v))
+
+			log.Println("accepting http challenge...")
+
+			_, err = acs.acmeClient.Accept(ctx, chal)
+			if err != nil {
+				return nil, err
+			}
+
+			log.Println("waiting authorization...")
+			_, err = acs.acmeClient.WaitAuthorization(ctx, z.URI)
+			if err != nil {
+				return nil, err
 			}
 		}
-		if chal == nil {
-			return nil, errors.New("no supported challenge type found")
-		}
-
-		k := acs.acmeClient.HTTP01ChallengePath(chal.Token)
-		v, err := acs.acmeClient.HTTP01ChallengeResponse(chal.Token)
+		// All authorizations are satisfied.
+		// Wait for the CA to update the order status.
+		o, err = acs.acmeClient.WaitOrder(ctx, o.URI)
 		if err != nil {
 			return nil, err
 		}
-
-		defer acs.responderServer.ClearChallengeValue(k)
-		acs.responderServer.SetChallengeValue(k, []byte(v))
-
-		log.Println("accepting http challenge...")
-
-		_, err = acs.acmeClient.Accept(ctx, chal)
-		if err != nil {
-			return nil, err
-		}
-
-		log.Println("waiting authorization...")
-		_, err = acs.acmeClient.WaitAuthorization(ctx, authz.URI)
-		if err != nil {
-			return nil, err
-		}
+	} else {
+		return nil, fmt.Errorf("invalid new order status %q", o.Status)
 	}
 
 	return acs.issueCert(ctx, hostname, pkey)

@@ -150,6 +150,7 @@ func (as *adminServer) source(vars map[string]string, liu *uaa.LoggedInUser, w h
 
 func (as *adminServer) flashMessage(w http.ResponseWriter, r *http.Request, m string) {
 	session, _ := as.cookies.Get(r, "f")
+	log.Println(m)
 	session.AddFlash(m)
 	session.Save(r, w)
 }

@@ -2,6 +2,9 @@ package main
 
 import (
 	"errors"
+	"github.com/getsentry/raven-go"
+	errors2 "github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/url"
 
@@ -32,6 +35,8 @@ type config struct {
 	} `yaml:"servers"`
 
 	Output outputObserver `yaml:"output"`
+
+	SentryDSN string `yaml:"sentry_dsn"`
 }
 
 func newConf(configPath string) (*config, error) {
@@ -95,6 +100,12 @@ func newConf(configPath string) (*config, error) {
 }
 
 func (c *config) RunForever() {
+	if c.SentryDSN != "" {
+		err := raven.SetDSN(c.SentryDSN)
+		if err != nil {
+			log.Fatalf("%+v", errors2.Wrap(err, "Can't set up sentry"))
+		}
+	}
 	go c.Servers.Admin.RunForever()
 	go c.Servers.ACME.RunForever()
 	c.Daemon.RunForever()

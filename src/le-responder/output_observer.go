@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/hex"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"strings"
 	"sync"
 
