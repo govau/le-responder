@@ -155,3 +155,11 @@ The above pipeline expects HAProxy to be colocated on the `gorouter` instances. 
 ## TODO
 
 - Consider not using `credhub` and instead use simpler abstraction (such as S3) for state
+
+## Local testing notes
+In July 2020 needed to upgrade to ACME v2 for http (auto) and dns (manual) auth methods https://github.com/golang/go/issues/21081#issuecomment-537075135
+You need a credhub on localhost port 8844. 
+Use SSH tunnelling?
+
+Also need http://169.254.169.254/latest/meta-data/iam/security-credentials/ for local AWS credentials. 
+You can use `aws-vault --server` https://github.com/99designs/aws-vault/blob/master/USAGE.md#using---server

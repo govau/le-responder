@@ -4,7 +4,7 @@ package main
 
 import (
 	"flag"
-	"log"
+	log "github.com/sirupsen/logrus"
 )
 
 func main() {

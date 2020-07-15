@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"errors"
-	"log"
+	log "github.com/sirupsen/logrus"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/aws"
