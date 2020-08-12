@@ -1,6 +1,6 @@
 set -eu
 
-source /var/vcap/packages/golang-1.10-linux/bosh/compile.env
+source /var/vcap/packages/golang-1.14-linux/bosh/compile.env
 
 JOB=le-responder
 
